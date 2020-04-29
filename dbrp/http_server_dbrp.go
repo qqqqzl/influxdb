@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
-	"github.com/influxdata/httprouter"
 	"github.com/influxdata/influxdb/v2"
 	kithttp "github.com/influxdata/influxdb/v2/kit/transport/http"
 	"go.uber.org/zap"
@@ -89,8 +88,7 @@ func (h *DBRPHandler) handleGetDBRPs(w http.ResponseWriter, r *http.Request) {
 
 func (h *DBRPHandler) handleGetDBRP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	params := httprouter.ParamsFromContext(ctx)
-	id := params.ByName("id")
+	id := chi.URLParam(r, "id")
 	if id == "" {
 		h.api.Err(w, &influxdb.Error{
 			Code: influxdb.EInvalid,
@@ -125,14 +123,14 @@ func (h *DBRPHandler) handleGetDBRP(w http.ResponseWriter, r *http.Request) {
 
 func (h *DBRPHandler) handlePatchDBRP(w http.ResponseWriter, r *http.Request) {
 	bodyRequest := &struct {
-		Default         bool   `json:"content"`
-		RetentionPolicy string `json:"retention_policy"`
-		Database        string `json:"database"`
+		Default         *bool   `json:"content"`
+		RetentionPolicy *string `json:"retention_policy"`
+		Database        *string `json:"database"`
 	}{}
 
 	ctx := r.Context()
-	params := httprouter.ParamsFromContext(ctx)
-	id := params.ByName("id")
+
+	id := chi.URLParam(r, "id")
 	if id == "" {
 		h.api.Err(w, &influxdb.Error{
 			Code: influxdb.EInvalid,
@@ -168,16 +166,16 @@ func (h *DBRPHandler) handlePatchDBRP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if dbrp.Default != bodyRequest.Default {
-		dbrp.Default = bodyRequest.Default
+	if bodyRequest.Default != nil && dbrp.Default != *bodyRequest.Default {
+		dbrp.Default = *bodyRequest.Default
 	}
 
-	if bodyRequest.Database != "" && bodyRequest.Database != dbrp.Database {
-		dbrp.Database = bodyRequest.Database
+	if bodyRequest.Database != nil && *bodyRequest.Database != dbrp.Database {
+		dbrp.Database = *bodyRequest.Database
 	}
 
-	if bodyRequest.RetentionPolicy != "" && bodyRequest.RetentionPolicy != dbrp.RetentionPolicy {
-		dbrp.RetentionPolicy = bodyRequest.RetentionPolicy
+	if bodyRequest.RetentionPolicy != nil && *bodyRequest.RetentionPolicy != dbrp.RetentionPolicy {
+		dbrp.RetentionPolicy = *bodyRequest.RetentionPolicy
 	}
 
 	if err := h.dbrpSvc.Update(ctx, dbrp); err != nil {
@@ -194,8 +192,7 @@ func (h *DBRPHandler) handlePatchDBRP(w http.ResponseWriter, r *http.Request) {
 
 func (h *DBRPHandler) handleDeleteDBRP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	params := httprouter.ParamsFromContext(ctx)
-	id := params.ByName("id")
+	id := chi.URLParam(r, "id")
 	if id == "" {
 		h.api.Err(w, &influxdb.Error{
 			Code: influxdb.EInvalid,

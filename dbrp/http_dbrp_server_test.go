@@ -3,8 +3,10 @@ package dbrp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -192,6 +194,162 @@ func Test_handleGetDBRPs(t *testing.T) {
 
 			if !cmp.Equal(s.ExpectedDBRPs, dbrps.Content) {
 				t.Fatalf(cmp.Diff(s.ExpectedDBRPs, dbrps.Content))
+			}
+
+		})
+	}
+}
+
+func Test_handlPatchDBRP(t *testing.T) {
+	table := []struct {
+		Name         string
+		ExpectedErr  *influxdb.Error
+		ExpectedDBRP *influxdb.DBRPMapping
+		URLSuffix    string
+		Input        io.Reader
+	}{
+		{
+			Name:      "happy path update",
+			URLSuffix: "/1111111111111111?orgID=059af7ed2a034000",
+			Input: strings.NewReader(`{
+	"database": "updatedb"
+}`),
+			ExpectedDBRP: &influxdb.DBRPMapping{
+				ID:              platformtesting.MustIDBase16("1111111111111111"),
+				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
+				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+				Database:        "updatedb",
+				RetentionPolicy: "autogen",
+				Default:         true,
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, s := range table {
+		t.Run(s.Name, func(t *testing.T) {
+			if s.ExpectedErr != nil && s.ExpectedDBRP != nil {
+				t.Error("one of those has to be set")
+			}
+			svc, server, shutdown := initBucketHttpService(t)
+			defer shutdown()
+			client := server.Client()
+
+			if svc, ok := svc.(*dbrp.Service); ok {
+				svc.IDGen = mock.NewIDGenerator("1111111111111111", t)
+			}
+
+			dbrp := &influxdb.DBRPMapping{
+				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
+				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+				Database:        "mydb",
+				RetentionPolicy: "autogen",
+				Default:         true,
+			}
+			if err := svc.Create(ctx, dbrp); err != nil {
+				t.Fatal(err)
+			}
+
+			req, _ := http.NewRequest(http.MethodPatch, server.URL+s.URLSuffix, s.Input)
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+
+			if s.ExpectedErr != nil {
+				b, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if !strings.Contains(string(b), s.ExpectedErr.Error()) {
+					t.Fatal(string(b))
+				}
+				return
+			}
+			dbrpResponse := struct {
+				Content *influxdb.DBRPMapping `json:"content"`
+			}{}
+
+			if err := json.NewDecoder(resp.Body).Decode(&dbrpResponse); err != nil {
+				t.Fatal(err)
+			}
+
+			if !cmp.Equal(s.ExpectedDBRP, dbrpResponse.Content) {
+				t.Fatalf(cmp.Diff(s.ExpectedDBRP, dbrpResponse.Content))
+			}
+
+		})
+	}
+}
+
+func Test_handlDeleteDBRP(t *testing.T) {
+	table := []struct {
+		Name         string
+		ExpectedErr  *influxdb.Error
+		ExpectedDBRP *influxdb.DBRPMapping
+		URLSuffix    string
+		Input        io.Reader
+	}{
+		{
+			Name:      "delete",
+			URLSuffix: "/1111111111111111?orgID=059af7ed2a034000",
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, s := range table {
+		t.Run(s.Name, func(t *testing.T) {
+			if s.ExpectedErr != nil && s.ExpectedDBRP != nil {
+				t.Error("one of those has to be set")
+			}
+			svc, server, shutdown := initBucketHttpService(t)
+			defer shutdown()
+			client := server.Client()
+
+			if svc, ok := svc.(*dbrp.Service); ok {
+				svc.IDGen = mock.NewIDGenerator("1111111111111111", t)
+			}
+
+			d := &influxdb.DBRPMapping{
+				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
+				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+				Database:        "mydb",
+				RetentionPolicy: "autogen",
+				Default:         true,
+			}
+			if err := svc.Create(ctx, d); err != nil {
+				t.Fatal(err)
+			}
+
+			req, _ := http.NewRequest(http.MethodDelete, server.URL+s.URLSuffix, nil)
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+
+			if s.ExpectedErr != nil {
+				b, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if !strings.Contains(string(b), s.ExpectedErr.Error()) {
+					t.Fatal(string(b))
+				}
+				return
+			}
+
+			if resp.StatusCode != http.StatusNoContent {
+				t.Fatalf("expected status code %d, got %d", http.StatusNoContent, resp.StatusCode)
+			}
+
+			if _, err := svc.FindByID(ctx, platformtesting.MustIDBase16("1111111111111111"), platformtesting.MustIDBase16("5555f7ed2a035555")); !errors.Is(err, dbrp.ErrDBRPNotFound) {
+				t.Fatalf("expected err dbrp not found, got %s", err)
 			}
 
 		})
