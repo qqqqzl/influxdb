@@ -13,7 +13,7 @@ var (
 	bucket = []byte("dbrpv1")
 )
 
-var _ influxdb.DBRPMappingServiceV2 = (*DBRPMappingAuthorzedService)(nil)
+var _ influxdb.DBRPMappingServiceV2 = (*DBRPMappingAuthorizedService)(nil)
 
 type Service struct {
 	store     kv.Store
