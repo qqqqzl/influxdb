@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	influxdb "github.com/influxdata/influxdb/v2"
 	"github.com/influxdata/influxdb/v2/dbrp"
 	"github.com/influxdata/influxdb/v2/inmem"
@@ -108,6 +109,89 @@ func Test_handlePostDBRP(t *testing.T) {
 
 			if dbrp.OrganizationID != s.ExpectedDBRP.OrganizationID {
 				t.Fatalf("expected orgid %s got %s", s.ExpectedDBRP.OrganizationID, dbrp.OrganizationID)
+			}
+
+		})
+	}
+}
+
+func Test_handleGetDBRPs(t *testing.T) {
+	table := []struct {
+		Name          string
+		QueryParams   string
+		ExpectedErr   *influxdb.Error
+		ExpectedDBRPs []influxdb.DBRPMapping
+	}{
+		{
+			Name:        "Create with invalid orgID",
+			QueryParams: "orgID=059af7ed2a034000",
+			ExpectedDBRPs: []influxdb.DBRPMapping{
+				{
+					ID:              platformtesting.MustIDBase16("1111111111111111"),
+					BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
+					OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+					Database:        "mydb",
+					RetentionPolicy: "autogen",
+					Default:         true,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	for _, s := range table {
+		t.Run(s.Name, func(t *testing.T) {
+			if s.ExpectedErr != nil && len(s.ExpectedDBRPs) != 0 {
+				t.Error("one of those has to be set")
+			}
+			svc, server, shutdown := initBucketHttpService(t)
+			defer shutdown()
+
+			if svc, ok := svc.(*dbrp.Service); ok {
+				svc.IDGen = mock.NewIDGenerator("1111111111111111", t)
+			}
+			dbrp := &influxdb.DBRPMapping{
+				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
+				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+				Database:        "mydb",
+				RetentionPolicy: "autogen",
+				Default:         true,
+			}
+			if err := svc.Create(ctx, dbrp); err != nil {
+				t.Fatal(err)
+			}
+
+			client := server.Client()
+			resp, err := client.Get(server.URL + "?" + s.QueryParams)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+
+			if s.ExpectedErr != nil {
+				b, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if !strings.Contains(string(b), s.ExpectedErr.Error()) {
+					t.Fatal(string(b))
+				}
+				return
+			}
+			dbrps := struct {
+				Content []influxdb.DBRPMapping `json:"content"`
+			}{}
+			if err := json.NewDecoder(resp.Body).Decode(&dbrps); err != nil {
+				t.Fatal(err)
+			}
+
+			if len(dbrps.Content) != len(s.ExpectedDBRPs) {
+				t.Fatalf("expected %d dbrps got %d", len(s.ExpectedDBRPs), len(dbrps.Content))
+			}
+
+			if !cmp.Equal(s.ExpectedDBRPs, dbrps.Content) {
+				t.Fatalf(cmp.Diff(s.ExpectedDBRPs, dbrps.Content))
 			}
 
 		})
