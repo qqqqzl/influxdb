@@ -22,6 +22,7 @@ func init() {
 		PushDownReadTagKeysRule{},
 		PushDownReadTagValuesRule{},
 		SortedPivotRule{},
+		// PushDownWindowAggregateRule{},
 	)
 }
 
@@ -637,4 +638,98 @@ func (SortedPivotRule) Rewrite(ctx context.Context, pn plan.Node) (plan.Node, bo
 		return nil, false, err
 	}
 	return pn, false, nil
+}
+
+//
+// Push Down of window aggregates.
+// ReadRangePhys |> window |> { min, max, mean }
+//
+type PushDownWindowAggregateRule struct{}
+
+func (PushDownWindowAggregateRule) Name() string {
+	return "PushDownWindowAggregateRule"
+}
+
+func (rule PushDownWindowAggregateRule) Pattern() plan.Pattern {
+	return plan.OneOf(
+		[]plan.ProcedureKind{
+			universe.MinKind,
+			universe.MaxKind,
+			universe.MeanKind,
+			universe.CountKind,
+			universe.SumKind,
+		},
+		plan.Pat(universe.WindowKind, plan.Pat(ReadRangePhysKind)))
+}
+
+func (PushDownWindowAggregateRule) Rewrite(ctx context.Context, pn plan.Node) (plan.Node, bool, error) {
+	// Check Capabilities
+	reader := GetStorageDependencies(ctx).FromDeps.Reader
+	windowAggregateReader, ok := reader.(WindowAggregateReader);
+	if !ok || !windowAggregateReader.HasWindowAggregateCapability(ctx) {
+		return pn, false, nil
+	}
+
+	// Check the aggregate function spec. Require operation on _value.
+	fnNode := pn
+	switch fnNode.Kind() {
+	case universe.MinKind:
+		minSpec := fnNode.ProcedureSpec().(*universe.MinProcedureSpec)
+		if minSpec.Column != "_value" {
+			return pn, false, nil
+		}
+	case universe.MaxKind:
+		maxSpec := fnNode.ProcedureSpec().(*universe.MaxProcedureSpec)
+		if maxSpec.Column != "_value" {
+			return pn, false, nil
+		}
+	case universe.MeanKind:
+		meanSpec := fnNode.ProcedureSpec().(*universe.MeanProcedureSpec)
+		if len(meanSpec.Columns) != 1 || meanSpec.Columns[0] != "_value" {
+			return pn, false, nil
+		}
+	case universe.CountKind:
+		countSpec := fnNode.ProcedureSpec().(*universe.CountProcedureSpec)
+		if len(countSpec.Columns) != 1 || countSpec.Columns[0] != "_value" {
+			return pn, false, nil
+		}
+	case universe.SumKind:
+		sumSpec := fnNode.ProcedureSpec().(*universe.SumProcedureSpec)
+		if len(sumSpec.Columns) != 1 || sumSpec.Columns[0] != "_value" {
+			return pn, false, nil
+		}
+	}
+
+	windowNode := fnNode.Predecessors()[0]
+	windowSpec := windowNode.ProcedureSpec().(*universe.WindowProcedureSpec)
+	fromNode := windowNode.Predecessors()[0]
+	fromSpec := fromNode.ProcedureSpec().(*ReadRangePhysSpec)
+
+	// every and period must be equal
+	// every.months must be zero
+	// every.isNegative must be false
+	// offset: must be zero
+	// timeColumn: must be "_time"
+	// startColumn: must be "_start"
+	// stopColumn: must be "_stop"
+	// createEmpty: must be false
+	window := windowSpec.Window
+	if !window.Every.Equal(window.Period) ||
+		window.Every.Months() != 0 ||
+		window.Every.IsNegative() ||
+		window.Every.IsZero() ||
+		!window.Offset.IsZero() ||
+		windowSpec.TimeColumn != "_time" ||
+		windowSpec.StartColumn != "_start" ||
+		windowSpec.StopColumn != "_stop" ||
+		windowSpec.CreateEmpty {
+		return pn, false, nil
+	}
+
+	// Rule passes.
+	return plan.CreatePhysicalNode("ReadWindowAggregate", &ReadWindowAggregatePhysSpec{
+		ReadRangePhysSpec: *fromSpec.Copy().(*ReadRangePhysSpec),
+		Aggregates:        []plan.ProcedureKind{fnNode.Kind()},
+		WindowEvery:       window.Every.Nanoseconds(),
+	}), true, nil
 }
