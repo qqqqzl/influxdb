@@ -5,6 +5,8 @@ import (
 
 	"github.com/influxdata/flux/memory"
 	"github.com/influxdata/influxdb/v2/query"
+	"github.com/influxdata/influxdb/v2/query/stdlib/influxdata/influxdb"
+	"github.com/influxdata/influxdb/v2/storage/reads"
 )
 
 type StorageReader struct {
@@ -42,14 +44,14 @@ func (s *StorageReader) Close() {
 
 type WindowAggregateStoreReader struct {
 	*StorageReader
-	HasWindowAggregateCapabilityFn func(ctx context.Context) bool
-	ReadWindowAggregateFn          func(ctx context.Context, spec query.ReadWindowAggregateSpec, alloc *memory.Allocator) (query.TableIterator, error)
+	HasWindowAggregateCapabilityFn func(ctx context.Context, capability ...*reads.WindowAggregateCapability) bool
+	ReadWindowAggregateFn          func(ctx context.Context, spec influxdb.ReadWindowAggregateSpec, alloc *memory.Allocator) (influxdb.TableIterator, error)
 }
 
-func (s *WindowAggregateStoreReader) HasWindowAggregateCapability(ctx context.Context, capability ...*query.WindowAggregateCapability) bool {
+func (s *WindowAggregateStoreReader) HasWindowAggregateCapability(ctx context.Context, capability ...*reads.WindowAggregateCapability) bool {
 	// Use the function if it exists.
 	if s.HasWindowAggregateCapabilityFn != nil {
-		return s.HasWindowAggregateCapabilityFn(ctx)
+		return s.HasWindowAggregateCapabilityFn(ctx, capability...)
 	}
 
 	// Provide a default implementation if one wasn't set.
@@ -57,6 +59,6 @@ func (s *WindowAggregateStoreReader) HasWindowAggregateCapability(ctx context.Co
 	return s.ReadWindowAggregateFn != nil
 }
 
-func (s *WindowAggregateStoreReader) ReadWindowAggregate(ctx context.Context, spec query.ReadWindowAggregateSpec, alloc *memory.Allocator) (query.TableIterator, error) {
+func (s *WindowAggregateStoreReader) ReadWindowAggregate(ctx context.Context, spec influxdb.ReadWindowAggregateSpec, alloc *memory.Allocator) (query.TableIterator, error) {
 	return s.ReadWindowAggregateFn(ctx, spec, alloc)
 }
