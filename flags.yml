@@ -26,3 +26,33 @@
   default: 42
   contact: Gavin Cabbage
   expose: true
+
+- name: Push Down Window Aggregate Min
+  description: Enable Min variant of PushDownWindowAggregateRule
+  key: pushDownWindowAggregateMin
+  default: false
+  contact: Query Team
+
+- name: Push Down Window Aggregate Max
+  description: Enable Max variant of PushDownWindowAggregateRule
+  key: pushDownWindowAggregateMax
+  default: false
+  contact: Query Team
+
+- name: Push Down Window Aggregate Mean
+  description: Enable Mean variant of PushDownWindowAggregateRule
+  key: pushDownWindowAggregateMean
+  default: false
+  contact: Query Team
+
+- name: Push Down Window Aggregate Count
+  description: Enable Count variant of PushDownWindowAggregateRule
+  key: pushDownWindowAggregateCount
+  default: false
+  contact: Query Team
+
+- name: Push Down Window Aggregate Sum
+  description: Enable Sum variant of PushDownWindowAggregateRule
+  key: pushDownWindowAggregateSum
+  default: false
+  contact: Query Team

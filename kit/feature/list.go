@@ -30,12 +30,92 @@ func FrontendExample() IntFlag {
 	return frontendExample
 }
 
+var pushDownWindowAggregateMin = MakeBoolFlag(
+	"Push Down Window Aggregate Min",
+	"pushDownWindowAggregateMin",
+	"Query Team",
+	false,
+	Temporary,
+	false,
+)
+
+// PushDownWindowAggregateMin - Enable Min variant of PushDownWindowAggregateRule
+func PushDownWindowAggregateMin() BoolFlag {
+	return pushDownWindowAggregateMin
+}
+
+var pushDownWindowAggregateMax = MakeBoolFlag(
+	"Push Down Window Aggregate Max",
+	"pushDownWindowAggregateMax",
+	"Query Team",
+	false,
+	Temporary,
+	false,
+)
+
+// PushDownWindowAggregateMax - Enable Max variant of PushDownWindowAggregateRule
+func PushDownWindowAggregateMax() BoolFlag {
+	return pushDownWindowAggregateMax
+}
+
+var pushDownWindowAggregateMean = MakeBoolFlag(
+	"Push Down Window Aggregate Mean",
+	"pushDownWindowAggregateMean",
+	"Query Team",
+	false,
+	Temporary,
+	false,
+)
+
+// PushDownWindowAggregateMean - Enable Mean variant of PushDownWindowAggregateRule
+func PushDownWindowAggregateMean() BoolFlag {
+	return pushDownWindowAggregateMean
+}
+
+var pushDownWindowAggregateCount = MakeBoolFlag(
+	"Push Down Window Aggregate Count",
+	"pushDownWindowAggregateCount",
+	"Query Team",
+	false,
+	Temporary,
+	false,
+)
+
+// PushDownWindowAggregateCount - Enable Count variant of PushDownWindowAggregateRule
+func PushDownWindowAggregateCount() BoolFlag {
+	return pushDownWindowAggregateCount
+}
+
+var pushDownWindowAggregateSum = MakeBoolFlag(
+	"Push Down Window Aggregate Sum",
+	"pushDownWindowAggregateSum",
+	"Query Team",
+	false,
+	Temporary,
+	false,
+)
+
+// PushDownWindowAggregateSum - Enable Sum variant of PushDownWindowAggregateRule
+func PushDownWindowAggregateSum() BoolFlag {
+	return pushDownWindowAggregateSum
+}
+
 var all = []Flag{
 	backendExample,
 	frontendExample,
+	pushDownWindowAggregateMin,
+	pushDownWindowAggregateMax,
+	pushDownWindowAggregateMean,
+	pushDownWindowAggregateCount,
+	pushDownWindowAggregateSum,
 }
 
 var byKey = map[string]Flag{
-	"backendExample":  backendExample,
-	"frontendExample": frontendExample,
+	"backendExample":               backendExample,
+	"frontendExample":              frontendExample,
+	"pushDownWindowAggregateMin":   pushDownWindowAggregateMin,
+	"pushDownWindowAggregateMax":   pushDownWindowAggregateMax,
+	"pushDownWindowAggregateMean":  pushDownWindowAggregateMean,
+	"pushDownWindowAggregateCount": pushDownWindowAggregateCount,
+	"pushDownWindowAggregateSum":   pushDownWindowAggregateSum,
 }

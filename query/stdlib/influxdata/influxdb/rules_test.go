@@ -20,6 +20,8 @@ import (
 	"github.com/influxdata/influxdb/v2/query/stdlib/influxdata/influxdb"
 	"github.com/influxdata/influxdb/v2/storage/reads"
 	"github.com/influxdata/influxdb/v2/storage/reads/datatypes"
+	"github.com/influxdata/influxdb/v2/mock"
+	"github.com/influxdata/influxdb/v2/kit/feature"
 )
 
 // A small mock reader so we can indicate if rule-related capabilities are
@@ -1140,19 +1142,30 @@ func TestReadTagValuesRule(t *testing.T) {
 // Window Aggregate Testing
 //
 func TestPushDownWindowAggregateRule(t *testing.T) {
+	// Turn on all variants.
+	flagger := mock.NewFlagger(
+		map[feature.Flag] interface{}{
+			feature.PushDownWindowAggregateMin(): true,
+			feature.PushDownWindowAggregateMax(): true,
+			feature.PushDownWindowAggregateMean(): true,
+			feature.PushDownWindowAggregateCount(): true,
+			feature.PushDownWindowAggregateSum(): true,
+	})
+
+	withFlagger, _ := feature.Annotate(context.Background(), flagger)
 
 	// Construct dependencies either with or without aggregate window caps.
-	deps := func(Have bool) influxdb.StorageDependencies {
+	deps := func(have bool) influxdb.StorageDependencies {
 		return influxdb.StorageDependencies{
 			FromDeps: influxdb.FromDependencies{
-				Reader:  mockReaderCaps{ Have: Have },
+				Reader:  mockReaderCaps{ Have: have },
 				Metrics: influxdb.NewMetrics(nil),
 			},
 		}
 	}
 
-	haveCaps := deps(true).Inject(context.Background())
-	noCaps := deps(false).Inject(context.Background())
+	haveCaps := deps(true).Inject(withFlagger)
+	noCaps := deps(false).Inject(withFlagger)
 
 	readRange := influxdb.ReadRangePhysSpec{
 		Bucket: "my-bucket",

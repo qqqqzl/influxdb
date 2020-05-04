@@ -11,6 +11,7 @@ import (
 	"github.com/influxdata/flux/semantic"
 	"github.com/influxdata/flux/stdlib/influxdata/influxdb"
 	"github.com/influxdata/flux/stdlib/universe"
+	"github.com/influxdata/influxdb/v2/kit/feature"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 		PushDownReadTagKeysRule{},
 		PushDownReadTagValuesRule{},
 		SortedPivotRule{},
-		// PushDownWindowAggregateRule{},
+		PushDownWindowAggregateRule{},
 	)
 }
 
@@ -674,26 +675,46 @@ func (PushDownWindowAggregateRule) Rewrite(ctx context.Context, pn plan.Node) (p
 	fnNode := pn
 	switch fnNode.Kind() {
 	case universe.MinKind:
+		if !feature.PushDownWindowAggregateMin().Enabled(ctx) {
+			return pn, false, nil
+		}
+
 		minSpec := fnNode.ProcedureSpec().(*universe.MinProcedureSpec)
 		if minSpec.Column != "_value" {
 			return pn, false, nil
 		}
 	case universe.MaxKind:
+		if !feature.PushDownWindowAggregateMax().Enabled(ctx) {
+			return pn, false, nil
+		}
+
 		maxSpec := fnNode.ProcedureSpec().(*universe.MaxProcedureSpec)
 		if maxSpec.Column != "_value" {
 			return pn, false, nil
 		}
 	case universe.MeanKind:
+		if !feature.PushDownWindowAggregateMean().Enabled(ctx) {
+			return pn, false, nil
+		}
+
 		meanSpec := fnNode.ProcedureSpec().(*universe.MeanProcedureSpec)
 		if len(meanSpec.Columns) != 1 || meanSpec.Columns[0] != "_value" {
 			return pn, false, nil
 		}
 	case universe.CountKind:
+		if !feature.PushDownWindowAggregateCount().Enabled(ctx) {
+			return pn, false, nil
+		}
+
 		countSpec := fnNode.ProcedureSpec().(*universe.CountProcedureSpec)
 		if len(countSpec.Columns) != 1 || countSpec.Columns[0] != "_value" {
 			return pn, false, nil
 		}
 	case universe.SumKind:
+		if !feature.PushDownWindowAggregateSum().Enabled(ctx) {
+			return pn, false, nil
+		}
+
 		sumSpec := fnNode.ProcedureSpec().(*universe.SumProcedureSpec)
 		if len(sumSpec.Columns) != 1 || sumSpec.Columns[0] != "_value" {
 			return pn, false, nil
