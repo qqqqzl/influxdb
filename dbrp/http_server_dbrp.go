@@ -44,7 +44,7 @@ func NewHTTPDBRPHandler(log *zap.Logger, dbrpSvc influxdb.DBRPMappingServiceV2) 
 
 func (h *DBRPHandler) handlePostDBRP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	dbrp := &influxdb.DBRPMapping{}
+	dbrp := &influxdb.DBRPMappingV2{}
 
 	if err := json.NewDecoder(r.Body).Decode(dbrp); err != nil {
 		h.api.Err(w, &influxdb.Error{
@@ -63,7 +63,7 @@ func (h *DBRPHandler) handlePostDBRP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *DBRPHandler) handleGetDBRPs(w http.ResponseWriter, r *http.Request) {
-	filter := influxdb.DBRPMappingFilter{}
+	filter := influxdb.DBRPMappingFilterV2{}
 
 	orgID, err := getOrgIDFromHTTPRequest(r)
 	if err != nil {
@@ -80,7 +80,7 @@ func (h *DBRPHandler) handleGetDBRPs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.api.Respond(w, http.StatusOK, struct {
-		Content []*influxdb.DBRPMapping `json:"content"`
+		Content []*influxdb.DBRPMappingV2 `json:"content"`
 	}{
 		Content: dbrps,
 	})
@@ -103,19 +103,13 @@ func (h *DBRPHandler) handleGetDBRP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := getOrgIDFromHTTPRequest(r)
-	if err != nil {
-		h.api.Err(w, err)
-		return
-	}
-
-	dbrp, err := h.dbrpSvc.FindByID(ctx, orgID, i)
+	dbrp, err := h.dbrpSvc.FindByID(ctx, i)
 	if err != nil {
 		h.api.Err(w, err)
 		return
 	}
 	h.api.Respond(w, http.StatusOK, struct {
-		Content *influxdb.DBRPMapping `json:"content"`
+		Content *influxdb.DBRPMappingV2 `json:"content"`
 	}{
 		Content: dbrp,
 	})
@@ -145,13 +139,7 @@ func (h *DBRPHandler) handlePatchDBRP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := getOrgIDFromHTTPRequest(r)
-	if err != nil {
-		h.api.Err(w, err)
-		return
-	}
-
-	dbrp, err := h.dbrpSvc.FindByID(ctx, orgID, i)
+	dbrp, err := h.dbrpSvc.FindByID(ctx, i)
 	if err != nil {
 		h.api.Err(w, err)
 		return
@@ -184,7 +172,7 @@ func (h *DBRPHandler) handlePatchDBRP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.api.Respond(w, http.StatusOK, struct {
-		Content *influxdb.DBRPMapping `json:"content"`
+		Content *influxdb.DBRPMappingV2 `json:"content"`
 	}{
 		Content: dbrp,
 	})
@@ -207,13 +195,7 @@ func (h *DBRPHandler) handleDeleteDBRP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgID, err := getOrgIDFromHTTPRequest(r)
-	if err != nil {
-		h.api.Err(w, err)
-		return
-	}
-
-	if err := h.dbrpSvc.Delete(ctx, orgID, i); err != nil {
+	if err := h.dbrpSvc.Delete(ctx, i); err != nil {
 		h.api.Err(w, err)
 		return
 	}

@@ -16,7 +16,7 @@ var (
 	// ErrDBRPNotFound is used when the specified DBRP cannot be found
 	ErrDBRPNotFound = &influxdb.Error{
 		Code: influxdb.ENotFound,
-		Msg:  "unable to find DBRPorization",
+		Msg:  "unable to find DBRP",
 	}
 
 	// NotUniqueIDError is used when ...

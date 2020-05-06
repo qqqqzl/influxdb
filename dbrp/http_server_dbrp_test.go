@@ -41,7 +41,7 @@ func Test_handlePostDBRP(t *testing.T) {
 	table := []struct {
 		Name         string
 		ExpectedErr  *influxdb.Error
-		ExpectedDBRP *influxdb.DBRPMapping
+		ExpectedDBRP *influxdb.DBRPMappingV2
 		Input        io.Reader
 	}{
 		{
@@ -53,7 +53,7 @@ func Test_handlePostDBRP(t *testing.T) {
 	"retention_policy": "autogen",
 	"default": false
 }`),
-			ExpectedDBRP: &influxdb.DBRPMapping{
+			ExpectedDBRP: &influxdb.DBRPMappingV2{
 				OrganizationID: platformtesting.MustIDBase16("059af7ed2a034000"),
 			},
 		},
@@ -100,7 +100,7 @@ func Test_handlePostDBRP(t *testing.T) {
 				}
 				return
 			}
-			dbrp := &influxdb.DBRPMapping{}
+			dbrp := &influxdb.DBRPMappingV2{}
 			if err := json.NewDecoder(resp.Body).Decode(&dbrp); err != nil {
 				t.Fatal(err)
 			}
@@ -122,12 +122,12 @@ func Test_handleGetDBRPs(t *testing.T) {
 		Name          string
 		QueryParams   string
 		ExpectedErr   *influxdb.Error
-		ExpectedDBRPs []influxdb.DBRPMapping
+		ExpectedDBRPs []influxdb.DBRPMappingV2
 	}{
 		{
 			Name:        "Create with invalid orgID",
 			QueryParams: "orgID=059af7ed2a034000",
-			ExpectedDBRPs: []influxdb.DBRPMapping{
+			ExpectedDBRPs: []influxdb.DBRPMappingV2{
 				{
 					ID:              platformtesting.MustIDBase16("1111111111111111"),
 					BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
@@ -152,7 +152,7 @@ func Test_handleGetDBRPs(t *testing.T) {
 			if svc, ok := svc.(*dbrp.Service); ok {
 				svc.IDGen = mock.NewIDGenerator("1111111111111111", t)
 			}
-			dbrp := &influxdb.DBRPMapping{
+			dbrp := &influxdb.DBRPMappingV2{
 				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
 				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
 				Database:        "mydb",
@@ -182,7 +182,7 @@ func Test_handleGetDBRPs(t *testing.T) {
 				return
 			}
 			dbrps := struct {
-				Content []influxdb.DBRPMapping `json:"content"`
+				Content []influxdb.DBRPMappingV2 `json:"content"`
 			}{}
 			if err := json.NewDecoder(resp.Body).Decode(&dbrps); err != nil {
 				t.Fatal(err)
@@ -204,7 +204,7 @@ func Test_handlPatchDBRP(t *testing.T) {
 	table := []struct {
 		Name         string
 		ExpectedErr  *influxdb.Error
-		ExpectedDBRP *influxdb.DBRPMapping
+		ExpectedDBRP *influxdb.DBRPMappingV2
 		URLSuffix    string
 		Input        io.Reader
 	}{
@@ -214,7 +214,7 @@ func Test_handlPatchDBRP(t *testing.T) {
 			Input: strings.NewReader(`{
 	"database": "updatedb"
 }`),
-			ExpectedDBRP: &influxdb.DBRPMapping{
+			ExpectedDBRP: &influxdb.DBRPMappingV2{
 				ID:              platformtesting.MustIDBase16("1111111111111111"),
 				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
 				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
@@ -240,7 +240,7 @@ func Test_handlPatchDBRP(t *testing.T) {
 				svc.IDGen = mock.NewIDGenerator("1111111111111111", t)
 			}
 
-			dbrp := &influxdb.DBRPMapping{
+			dbrp := &influxdb.DBRPMappingV2{
 				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
 				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
 				Database:        "mydb",
@@ -270,7 +270,7 @@ func Test_handlPatchDBRP(t *testing.T) {
 				return
 			}
 			dbrpResponse := struct {
-				Content *influxdb.DBRPMapping `json:"content"`
+				Content *influxdb.DBRPMappingV2 `json:"content"`
 			}{}
 
 			if err := json.NewDecoder(resp.Body).Decode(&dbrpResponse); err != nil {
@@ -289,7 +289,7 @@ func Test_handlDeleteDBRP(t *testing.T) {
 	table := []struct {
 		Name         string
 		ExpectedErr  *influxdb.Error
-		ExpectedDBRP *influxdb.DBRPMapping
+		ExpectedDBRP *influxdb.DBRPMappingV2
 		URLSuffix    string
 		Input        io.Reader
 	}{
@@ -310,11 +310,8 @@ func Test_handlDeleteDBRP(t *testing.T) {
 			defer shutdown()
 			client := server.Client()
 
-			if svc, ok := svc.(*dbrp.Service); ok {
-				svc.IDGen = mock.NewIDGenerator("1111111111111111", t)
-			}
-
-			d := &influxdb.DBRPMapping{
+			d := &influxdb.DBRPMappingV2{
+				ID:              platformtesting.MustIDBase16("1111111111111111"),
 				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
 				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
 				Database:        "mydb",
@@ -348,7 +345,7 @@ func Test_handlDeleteDBRP(t *testing.T) {
 				t.Fatalf("expected status code %d, got %d", http.StatusNoContent, resp.StatusCode)
 			}
 
-			if _, err := svc.FindByID(ctx, platformtesting.MustIDBase16("1111111111111111"), platformtesting.MustIDBase16("5555f7ed2a035555")); !errors.Is(err, dbrp.ErrDBRPNotFound) {
+			if _, err := svc.FindByID(ctx, platformtesting.MustIDBase16("1111111111111111")); !errors.Is(err, dbrp.ErrDBRPNotFound) {
 				t.Fatalf("expected err dbrp not found, got %s", err)
 			}
 

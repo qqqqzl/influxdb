@@ -397,7 +397,7 @@ paths:
       operationId: GetDBRPsID
       tags:
         - DBRPs
-      summary: Retrieve a database retention policy ma
+      summary: Retrieve a database retention policy mapping
       parameters:
         - $ref: "#/components/parameters/TraceSpan"
         - in: query
@@ -11236,9 +11236,6 @@ components:
         bucketID:
           type: string
           description: the bucket ID used as target for the translation.
-        cluster:
-          type: string
-          description: temporary this has to be removed
         database:
           type: string
           description: InfluxDB v1 database

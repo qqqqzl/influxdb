@@ -13,7 +13,7 @@ var (
 	bucket = []byte("dbrpv1")
 )
 
-var _ influxdb.DBRPMappingServiceV2 = (*DBRPMappingAuthorizedService)(nil)
+var _ influxdb.DBRPMappingServiceV2 = (*AuthorizedService)(nil)
 
 type Service struct {
 	store     kv.Store
@@ -23,10 +23,8 @@ type Service struct {
 
 func NewService(ctx context.Context, bucketSvc influxdb.BucketService, st kv.Store) (influxdb.DBRPMappingServiceV2, error) {
 	if err := st.Update(ctx, func(tx kv.Tx) error {
-		if _, err := tx.Bucket(bucket); err != nil {
-			return err
-		}
-		return nil
+		_, err := tx.Bucket(bucket)
+		return err
 	}); err != nil {
 		return nil, err
 	}
@@ -38,7 +36,7 @@ func NewService(ctx context.Context, bucketSvc influxdb.BucketService, st kv.Sto
 }
 
 // FindBy returns the dbrp mapping the for cluster, db and rp.
-func (s *Service) FindByID(ctx context.Context, orgID, id influxdb.ID) (*influxdb.DBRPMapping, error) {
+func (s *Service) FindByID(ctx context.Context, id influxdb.ID) (*influxdb.DBRPMappingV2, error) {
 	encodedID, err := id.Encode()
 	if err != nil {
 		return nil, ErrInvalidDBRPID
@@ -62,13 +60,14 @@ func (s *Service) FindByID(ctx context.Context, orgID, id influxdb.ID) (*influxd
 		return nil, err
 	}
 
-	dbrp := &influxdb.DBRPMapping{}
+	dbrp := &influxdb.DBRPMappingV2{}
 	return dbrp, json.Unmarshal(b, dbrp)
 }
 
 // FindMany returns a list of dbrp mappings that match filter and the total count of matching dbrp mappings.
-func (s *Service) FindMany(ctx context.Context, filter influxdb.DBRPMappingFilter, opts ...influxdb.FindOptions) ([]*influxdb.DBRPMapping, int, error) {
-	dbrps := []*influxdb.DBRPMapping{}
+// TODO(affo): find a smart way to apply FindOptions to a list of items.
+func (s *Service) FindMany(ctx context.Context, filter influxdb.DBRPMappingFilterV2, opts ...influxdb.FindOptions) ([]*influxdb.DBRPMappingV2, int, error) {
+	dbrps := []*influxdb.DBRPMappingV2{}
 	err := s.store.View(ctx, func(tx kv.Tx) error {
 		bucket, err := tx.Bucket(bucket)
 		if err != nil {
@@ -80,7 +79,7 @@ func (s *Service) FindMany(ctx context.Context, filter influxdb.DBRPMappingFilte
 		}
 
 		for k, v := cur.First(); k != nil; k, v = cur.Next() {
-			dbrp := &influxdb.DBRPMapping{}
+			dbrp := &influxdb.DBRPMappingV2{}
 			json.Unmarshal(v, dbrp)
 			if filterFunc(dbrp, filter) {
 				dbrps = append(dbrps, dbrp)
@@ -95,8 +94,11 @@ func (s *Service) FindMany(ctx context.Context, filter influxdb.DBRPMappingFilte
 }
 
 // Create creates a new dbrp mapping, if a different mapping exists an error is returned.
-func (s *Service) Create(ctx context.Context, dbrp *influxdb.DBRPMapping) error {
-	dbrp.ID = s.IDGen.ID()
+// If the mapping already contains a valid ID that is used for storing the mapping.
+func (s *Service) Create(ctx context.Context, dbrp *influxdb.DBRPMappingV2) error {
+	if !dbrp.ID.Valid() {
+		dbrp.ID = s.IDGen.ID()
+	}
 	if err := dbrp.Validate(); err != nil {
 		return ErrInvalidDBRPIDError(err)
 	}
@@ -114,25 +116,20 @@ func (s *Service) Create(ctx context.Context, dbrp *influxdb.DBRPMapping) error 
 	}
 
 	// if a dbrp with this particular ID already exists an error is returned
-	if _, err := s.FindByID(ctx, dbrp.OrganizationID, dbrp.ID); err == nil {
+	if _, err := s.FindByID(ctx, dbrp.ID); err == nil {
 		return ErrDBRPAlreadyExist(err)
 	}
-	err = s.store.Update(ctx, func(tx kv.Tx) error {
+	return s.store.Update(ctx, func(tx kv.Tx) error {
 		bucket, err := tx.Bucket(bucket)
 		if err != nil {
 			return ErrInternalServiceError(err)
 		}
-		bucket.Put(encodedID, b)
-		return nil
+		return bucket.Put(encodedID, b)
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // Update a dbrp mapping
-func (s *Service) Update(ctx context.Context, dbrp *influxdb.DBRPMapping) error {
+func (s *Service) Update(ctx context.Context, dbrp *influxdb.DBRPMappingV2) error {
 	encodedID, err := dbrp.ID.Encode()
 	if err != nil {
 		return ErrInternalServiceError(err)
@@ -142,11 +139,11 @@ func (s *Service) Update(ctx context.Context, dbrp *influxdb.DBRPMapping) error 
 		return ErrInternalServiceError(err)
 	}
 
-	if _, err := s.FindByID(ctx, dbrp.OrganizationID, dbrp.ID); err != nil {
+	if _, err := s.FindByID(ctx, dbrp.ID); err != nil {
 		return ErrDBRPNotFound
 	}
 
-	err = s.store.Update(ctx, func(tx kv.Tx) error {
+	return s.store.Update(ctx, func(tx kv.Tx) error {
 		bucket, err := tx.Bucket(bucket)
 		if err != nil {
 			return ErrInternalServiceError(err)
@@ -154,36 +151,30 @@ func (s *Service) Update(ctx context.Context, dbrp *influxdb.DBRPMapping) error 
 		bucket.Put(encodedID, b)
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // Delete removes a dbrp mapping.
 // Deleting a mapping that does not exists is not an error.
-func (s *Service) Delete(ctx context.Context, orgID, id influxdb.ID) error {
+func (s *Service) Delete(ctx context.Context, id influxdb.ID) error {
 	encodedID, err := id.Encode()
 	if err != nil {
 		return ErrInternalServiceError(err)
 	}
-	err = s.store.Update(ctx, func(tx kv.Tx) error {
+	return s.store.Update(ctx, func(tx kv.Tx) error {
 		bucket, err := tx.Bucket(bucket)
 		if err != nil {
 			return ErrInternalServiceError(err)
 		}
 		return bucket.Delete(encodedID)
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // filterFunc is capable to validate if the dbrp is valid from a given filter.
 // it runs true if the filtering data are contained in the dbrp
-func filterFunc(dbrp *influxdb.DBRPMapping, filter influxdb.DBRPMappingFilter) bool {
-	return (filter.Cluster == nil || (*filter.Cluster) == dbrp.Cluster) &&
+func filterFunc(dbrp *influxdb.DBRPMappingV2, filter influxdb.DBRPMappingFilterV2) bool {
+	return (filter.ID == nil || (*filter.ID) == dbrp.ID) &&
+		(filter.OrgID == nil || (*filter.OrgID) == dbrp.OrganizationID) &&
+		(filter.BucketID == nil || (*filter.BucketID) == dbrp.BucketID) &&
 		(filter.Database == nil || (*filter.Database) == dbrp.Database) &&
 		(filter.RetentionPolicy == nil || (*filter.RetentionPolicy) == dbrp.RetentionPolicy) &&
 		(filter.Default == nil || (*filter.Default) == dbrp.Default)
