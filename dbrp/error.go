@@ -7,19 +7,19 @@ import (
 )
 
 var (
-	// ErrInvalidDBRPID is used when the DBRPorization's ID cannot be encoded
+	// ErrInvalidDBRPID is used when the ID of the DBRP cannot be encoded.
 	ErrInvalidDBRPID = &influxdb.Error{
 		Code: influxdb.EInvalid,
 		Msg:  "DBRPorization ID is invalid",
 	}
 
-	// ErrDBRPNotFound is used when the specified DBRP cannot be found
+	// ErrDBRPNotFound is used when the specified DBRP cannot be found.
 	ErrDBRPNotFound = &influxdb.Error{
 		Code: influxdb.ENotFound,
 		Msg:  "unable to find DBRP",
 	}
 
-	// NotUniqueIDError is used when ...
+	// NotUniqueIDError is used when the ID of the DBRP is not unique.
 	NotUniqueIDError = &influxdb.Error{
 		Code: influxdb.EConflict,
 		Msg:  "ID already exists",
@@ -41,11 +41,11 @@ func ErrUnauthorized(err error) *influxdb.Error {
 	}
 }
 
-// ErrInvalidDBRPIDError is used when a service was provided an invalid ID.
-func ErrInvalidDBRPIDError(err error) *influxdb.Error {
+// ErrInvalidDBRPError is used when a service was provided an invalid DBRP.
+func ErrInvalidDBRPError(err error) *influxdb.Error {
 	return &influxdb.Error{
 		Code: influxdb.EInvalid,
-		Msg:  "DBRP id provided is invalid",
+		Msg:  "DBRP provided is invalid",
 		Err:  err,
 	}
 }
@@ -66,7 +66,7 @@ func UnexpectedDBRPIndexError(err error) *influxdb.Error {
 	}
 }
 
-// ErrInternalServiceError is used when the error comes from an internal system.
+// ErrDBRPAlreadyExist is used when there is a conflict in creating a new DBRP.
 func ErrDBRPAlreadyExist(err error) *influxdb.Error {
 	return &influxdb.Error{
 		Code: influxdb.EConflict,

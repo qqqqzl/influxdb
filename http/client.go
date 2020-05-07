@@ -2,6 +2,7 @@ package http
 
 import (
 	"crypto/tls"
+	"github.com/influxdata/influxdb/v2/dbrp"
 	"net"
 	"net/http"
 	"net/url"
@@ -58,6 +59,7 @@ type Service struct {
 	*TelegrafService
 	*LabelService
 	*SecretService
+	*dbrp.Client
 }
 
 // NewService returns a service that is an HTTP client to a remote.
@@ -99,6 +101,7 @@ func NewService(httpClient *httpc.Client, addr, token string) (*Service, error) 
 		TelegrafService:             NewTelegrafService(httpClient),
 		LabelService:                &LabelService{Client: httpClient},
 		SecretService:               &SecretService{Client: httpClient},
+		Client:                      dbrp.NewClient(httpClient),
 	}, nil
 }
 

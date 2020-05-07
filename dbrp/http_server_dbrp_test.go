@@ -16,11 +16,11 @@ import (
 	"github.com/influxdata/influxdb/v2/dbrp"
 	"github.com/influxdata/influxdb/v2/inmem"
 	"github.com/influxdata/influxdb/v2/mock"
-	platformtesting "github.com/influxdata/influxdb/v2/testing"
+	influxdbtesting "github.com/influxdata/influxdb/v2/testing"
 	"go.uber.org/zap/zaptest"
 )
 
-func initBucketHttpService(t *testing.T) (influxdb.DBRPMappingServiceV2, *httptest.Server, func()) {
+func initHttpService(t *testing.T) (influxdb.DBRPMappingServiceV2, *httptest.Server, func()) {
 	t.Helper()
 	ctx := context.Background()
 	bucketSvc := mock.NewBucketService()
@@ -31,7 +31,7 @@ func initBucketHttpService(t *testing.T) (influxdb.DBRPMappingServiceV2, *httpte
 		t.Fatal(err)
 	}
 
-	server := httptest.NewServer(dbrp.NewHTTPDBRPHandler(zaptest.NewLogger(t), svc))
+	server := httptest.NewServer(dbrp.NewHTTPHandler(zaptest.NewLogger(t), svc))
 	return svc, server, func() {
 		server.Close()
 	}
@@ -54,7 +54,7 @@ func Test_handlePostDBRP(t *testing.T) {
 	"default": false
 }`),
 			ExpectedDBRP: &influxdb.DBRPMappingV2{
-				OrganizationID: platformtesting.MustIDBase16("059af7ed2a034000"),
+				OrganizationID: influxdbtesting.MustIDBase16("059af7ed2a034000"),
 			},
 		},
 		{
@@ -79,7 +79,7 @@ func Test_handlePostDBRP(t *testing.T) {
 			if s.ExpectedErr != nil && s.ExpectedDBRP != nil {
 				t.Error("one of those has to be set")
 			}
-			_, server, shutdown := initBucketHttpService(t)
+			_, server, shutdown := initHttpService(t)
 			defer shutdown()
 			client := server.Client()
 
@@ -129,9 +129,9 @@ func Test_handleGetDBRPs(t *testing.T) {
 			QueryParams: "orgID=059af7ed2a034000",
 			ExpectedDBRPs: []influxdb.DBRPMappingV2{
 				{
-					ID:              platformtesting.MustIDBase16("1111111111111111"),
-					BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
-					OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+					ID:              influxdbtesting.MustIDBase16("1111111111111111"),
+					BucketID:        influxdbtesting.MustIDBase16("5555f7ed2a035555"),
+					OrganizationID:  influxdbtesting.MustIDBase16("059af7ed2a034000"),
 					Database:        "mydb",
 					RetentionPolicy: "autogen",
 					Default:         true,
@@ -146,15 +146,15 @@ func Test_handleGetDBRPs(t *testing.T) {
 			if s.ExpectedErr != nil && len(s.ExpectedDBRPs) != 0 {
 				t.Error("one of those has to be set")
 			}
-			svc, server, shutdown := initBucketHttpService(t)
+			svc, server, shutdown := initHttpService(t)
 			defer shutdown()
 
 			if svc, ok := svc.(*dbrp.Service); ok {
 				svc.IDGen = mock.NewIDGenerator("1111111111111111", t)
 			}
 			dbrp := &influxdb.DBRPMappingV2{
-				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
-				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+				BucketID:        influxdbtesting.MustIDBase16("5555f7ed2a035555"),
+				OrganizationID:  influxdbtesting.MustIDBase16("059af7ed2a034000"),
 				Database:        "mydb",
 				RetentionPolicy: "autogen",
 				Default:         true,
@@ -215,9 +215,9 @@ func Test_handlPatchDBRP(t *testing.T) {
 	"database": "updatedb"
 }`),
 			ExpectedDBRP: &influxdb.DBRPMappingV2{
-				ID:              platformtesting.MustIDBase16("1111111111111111"),
-				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
-				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+				ID:              influxdbtesting.MustIDBase16("1111111111111111"),
+				BucketID:        influxdbtesting.MustIDBase16("5555f7ed2a035555"),
+				OrganizationID:  influxdbtesting.MustIDBase16("059af7ed2a034000"),
 				Database:        "updatedb",
 				RetentionPolicy: "autogen",
 				Default:         true,
@@ -232,7 +232,7 @@ func Test_handlPatchDBRP(t *testing.T) {
 			if s.ExpectedErr != nil && s.ExpectedDBRP != nil {
 				t.Error("one of those has to be set")
 			}
-			svc, server, shutdown := initBucketHttpService(t)
+			svc, server, shutdown := initHttpService(t)
 			defer shutdown()
 			client := server.Client()
 
@@ -241,8 +241,8 @@ func Test_handlPatchDBRP(t *testing.T) {
 			}
 
 			dbrp := &influxdb.DBRPMappingV2{
-				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
-				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+				BucketID:        influxdbtesting.MustIDBase16("5555f7ed2a035555"),
+				OrganizationID:  influxdbtesting.MustIDBase16("059af7ed2a034000"),
 				Database:        "mydb",
 				RetentionPolicy: "autogen",
 				Default:         true,
@@ -306,14 +306,14 @@ func Test_handlDeleteDBRP(t *testing.T) {
 			if s.ExpectedErr != nil && s.ExpectedDBRP != nil {
 				t.Error("one of those has to be set")
 			}
-			svc, server, shutdown := initBucketHttpService(t)
+			svc, server, shutdown := initHttpService(t)
 			defer shutdown()
 			client := server.Client()
 
 			d := &influxdb.DBRPMappingV2{
-				ID:              platformtesting.MustIDBase16("1111111111111111"),
-				BucketID:        platformtesting.MustIDBase16("5555f7ed2a035555"),
-				OrganizationID:  platformtesting.MustIDBase16("059af7ed2a034000"),
+				ID:              influxdbtesting.MustIDBase16("1111111111111111"),
+				BucketID:        influxdbtesting.MustIDBase16("5555f7ed2a035555"),
+				OrganizationID:  influxdbtesting.MustIDBase16("059af7ed2a034000"),
 				Database:        "mydb",
 				RetentionPolicy: "autogen",
 				Default:         true,
@@ -345,7 +345,7 @@ func Test_handlDeleteDBRP(t *testing.T) {
 				t.Fatalf("expected status code %d, got %d", http.StatusNoContent, resp.StatusCode)
 			}
 
-			if _, err := svc.FindByID(ctx, platformtesting.MustIDBase16("1111111111111111")); !errors.Is(err, dbrp.ErrDBRPNotFound) {
+			if _, err := svc.FindByID(ctx, influxdbtesting.MustIDBase16("059af7ed2a034000"), influxdbtesting.MustIDBase16("1111111111111111")); !errors.Is(err, dbrp.ErrDBRPNotFound) {
 				t.Fatalf("expected err dbrp not found, got %s", err)
 			}
 

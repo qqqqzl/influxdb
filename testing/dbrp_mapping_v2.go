@@ -3,20 +3,18 @@ package testing
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/influxdata/influxdb/v2"
 	"github.com/influxdata/influxdb/v2/dbrp"
+	"github.com/influxdata/influxdb/v2/mock"
 	"github.com/pkg/errors"
 )
 
-// TODO:
-//  - Update (all)
-//  - Create - bucket does not exist
-
-var dbrpMappingCmpOptionsV2 = cmp.Options{
+var DBRPMappingCmpOptionsV2 = cmp.Options{
 	cmp.Comparer(func(x, y []byte) bool {
 		return bytes.Equal(x, y)
 	}),
@@ -24,10 +22,7 @@ var dbrpMappingCmpOptionsV2 = cmp.Options{
 		out := make([]*influxdb.DBRPMappingV2, len(in))
 		copy(out, in) // Copy input slice to avoid mutating it
 		sort.Slice(out, func(i, j int) bool {
-			if out[i].Database != out[j].Database {
-				return out[i].Database < out[j].Database
-			}
-			return out[i].RetentionPolicy < out[j].RetentionPolicy
+			return out[i].ID < out[j].ID
 		})
 		return out
 	}),
@@ -56,7 +51,7 @@ func CleanupDBRPMappingsV2(ctx context.Context, s influxdb.DBRPMappingServiceV2)
 	}
 
 	for _, m := range mappings {
-		if err := s.Delete(ctx, m.ID); err != nil {
+		if err := s.Delete(ctx, m.OrganizationID, m.ID); err != nil {
 			return errors.Wrapf(err, "failed to remove dbrp mapping %v", m.ID)
 		}
 	}
@@ -111,6 +106,52 @@ func CreateDBRPMappingV2(
 			name: "error on create existing dbrpMapping with same ID",
 			fields: DBRPMappingFieldsV2{
 				DBRPMappingsV2: []*influxdb.DBRPMappingV2{{
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+			args: args{
+				dbrpMapping: &influxdb.DBRPMappingV2{
+					// NOTE(affo): in the "same ID" concept, orgID must match too!
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					ID:              100,
+					Database:        "database2",
+					RetentionPolicy: "retention_policy2",
+					Default:         false,
+					BucketID:        MustIDBase16(dbrpBucket2ID),
+				},
+			},
+			wants: wants{
+				err: dbrp.ErrDBRPAlreadyExist(nil),
+				dbrpMappings: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+		},
+		{
+			name: "error bucket does not exist",
+			fields: DBRPMappingFieldsV2{
+				BucketSvc: &mock.BucketService{
+					FindBucketByIDFn: func(ctx context.Context, id influxdb.ID) (*influxdb.Bucket, error) {
+						if id == MustIDBase16(dbrpBucket2ID) {
+							return nil, &influxdb.Error{
+								Code: influxdb.ENotFound,
+								Msg:  "bucket not found",
+							}
+						}
+						return nil, nil
+					},
+				},
+				DBRPMappingsV2: []*influxdb.DBRPMappingV2{{
 					ID:              100,
 					Database:        "database1",
 					RetentionPolicy: "retention_policy1",
@@ -126,21 +167,22 @@ func CreateDBRPMappingV2(
 					RetentionPolicy: "retention_policy1",
 					Default:         true,
 					OrganizationID:  MustIDBase16(dbrpOrg1ID),
-					BucketID:        MustIDBase16(dbrpBucket1ID),
+					BucketID:        MustIDBase16(dbrpBucket2ID),
 				},
 			},
 			wants: wants{
-				err: dbrp.ErrDBRPAlreadyExist(nil),
-				dbrpMappings: []*influxdb.DBRPMappingV2{
-					{
-						ID:              100,
-						Database:        "database1",
-						RetentionPolicy: "retention_policy1",
-						Default:         false,
-						OrganizationID:  MustIDBase16(dbrpOrg1ID),
-						BucketID:        MustIDBase16(dbrpBucket1ID),
-					},
+				err: &influxdb.Error{
+					Code: influxdb.ENotFound,
+					Msg:  "bucket not found",
 				},
+				dbrpMappings: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
 			},
 		},
 	}
@@ -152,12 +194,12 @@ func CreateDBRPMappingV2(
 			ctx := context.Background()
 			err := s.Create(ctx, tt.args.dbrpMapping)
 			if (err != nil) != (tt.wants.err != nil) {
-				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
+				t.Errorf("expected error '%v' got '%v'", tt.wants.err, err)
 			}
 
 			if err != nil && tt.wants.err != nil {
 				if err.Error() != tt.wants.err.Error() {
-					t.Fatalf("expected error messages to match '%v' got '%v'", tt.wants.err, err.Error())
+					t.Errorf("expected error messages to match '%v' got '%v'", tt.wants.err, err.Error())
 				}
 			}
 
@@ -165,7 +207,7 @@ func CreateDBRPMappingV2(
 			if err != nil {
 				t.Fatalf("failed to retrieve dbrpMappings: %v", err)
 			}
-			if diff := cmp.Diff(dbrpMappings, tt.wants.dbrpMappings, dbrpMappingCmpOptionsV2...); diff != "" {
+			if diff := cmp.Diff(dbrpMappings, tt.wants.dbrpMappings, DBRPMappingCmpOptionsV2...); diff != "" {
 				t.Errorf("dbrpMappings are different -got/+want\ndiff %s", diff)
 			}
 		})
@@ -605,7 +647,7 @@ func FindManyDBRPMappingsV2(
 				}
 			}
 
-			if diff := cmp.Diff(dbrpMappings, tt.wants.dbrpMappings, dbrpMappingCmpOptionsV2...); diff != "" {
+			if diff := cmp.Diff(dbrpMappings, tt.wants.dbrpMappings, DBRPMappingCmpOptionsV2...); diff != "" {
 				t.Errorf("dbrpMappings are different -got/+want\ndiff %s", diff)
 			}
 		})
@@ -617,7 +659,8 @@ func FindDBRPMappingByIDV2(
 	t *testing.T,
 ) {
 	type args struct {
-		ID influxdb.ID
+		OrgID influxdb.ID
+		ID    influxdb.ID
 	}
 
 	type wants struct {
@@ -662,7 +705,8 @@ func FindDBRPMappingByIDV2(
 				},
 			},
 			args: args{
-				ID: 200,
+				OrgID: MustIDBase16(dbrpOrg3ID),
+				ID:    200,
 			},
 			wants: wants{
 				dbrpMapping: &influxdb.DBRPMappingV2{
@@ -690,7 +734,30 @@ func FindDBRPMappingByIDV2(
 				},
 			},
 			args: args{
-				ID: 200,
+				OrgID: MustIDBase16(dbrpOrg3ID),
+				ID:    200,
+			},
+			wants: wants{
+				err: dbrp.ErrDBRPNotFound,
+			},
+		},
+		{
+			name: "find existing dbrpMapping but wrong orgID",
+			fields: DBRPMappingFieldsV2{
+				DBRPMappingsV2: []*influxdb.DBRPMappingV2{
+					{
+						ID:              100,
+						Database:        "database",
+						RetentionPolicy: "retention_policyA",
+						Default:         false,
+						OrganizationID:  MustIDBase16(dbrpOrg3ID),
+						BucketID:        MustIDBase16(dbrpBucketAID),
+					},
+				},
+			},
+			args: args{
+				OrgID: MustIDBase16(dbrpOrg2ID),
+				ID:    100,
 			},
 			wants: wants{
 				err: dbrp.ErrDBRPNotFound,
@@ -704,7 +771,7 @@ func FindDBRPMappingByIDV2(
 			defer done()
 			ctx := context.Background()
 
-			dbrpMapping, err := s.FindByID(ctx, tt.args.ID)
+			dbrpMapping, err := s.FindByID(ctx, tt.args.OrgID, tt.args.ID)
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
 			}
@@ -715,7 +782,190 @@ func FindDBRPMappingByIDV2(
 				}
 			}
 
-			if diff := cmp.Diff(dbrpMapping, tt.wants.dbrpMapping, dbrpMappingCmpOptionsV2...); diff != "" {
+			if diff := cmp.Diff(dbrpMapping, tt.wants.dbrpMapping, DBRPMappingCmpOptionsV2...); diff != "" {
+				t.Errorf("dbrpMappings are different -got/+want\ndiff %s", diff)
+			}
+		})
+	}
+}
+
+func UpdateDBRPMappingV2(
+	init func(DBRPMappingFieldsV2, *testing.T) (influxdb.DBRPMappingServiceV2, func()),
+	t *testing.T,
+) {
+	type args struct {
+		dbrpMapping *influxdb.DBRPMappingV2
+	}
+	type wants struct {
+		err          error
+		dbrpMappings []*influxdb.DBRPMappingV2
+	}
+
+	tests := []struct {
+		name   string
+		fields DBRPMappingFieldsV2
+		args   args
+		wants  wants
+	}{
+		{
+			name: "basic update",
+			fields: DBRPMappingFieldsV2{
+				DBRPMappingsV2: []*influxdb.DBRPMappingV2{
+					{
+						ID:              100,
+						Database:        "database1",
+						RetentionPolicy: "retention_policy1",
+						Default:         false,
+						OrganizationID:  MustIDBase16(dbrpOrg1ID),
+						BucketID:        MustIDBase16(dbrpBucket1ID),
+					},
+				},
+			},
+			args: args{
+				dbrpMapping: &influxdb.DBRPMappingV2{
+					ID:              100,
+					Database:        "database2",
+					RetentionPolicy: "retention_policy2",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				},
+			},
+			wants: wants{
+				dbrpMappings: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database2",
+					RetentionPolicy: "retention_policy2",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+		},
+		{
+			name: "update invalid dbrp",
+			fields: DBRPMappingFieldsV2{
+				DBRPMappingsV2: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+			args: args{
+				dbrpMapping: &influxdb.DBRPMappingV2{
+					ID:              100,
+					Database:        "./", // invalid db name.
+					RetentionPolicy: "retention_policy2",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket2ID),
+				},
+			},
+			wants: wants{
+				err: dbrp.ErrInvalidDBRPError(fmt.Errorf("database must contain at least one character and only be letters, numbers, '_', '-', and '.'")),
+				dbrpMappings: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+		},
+		{
+			name: "error dbrp not found",
+			fields: DBRPMappingFieldsV2{
+				DBRPMappingsV2: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+			args: args{
+				dbrpMapping: &influxdb.DBRPMappingV2{
+					ID:              200,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         true,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket2ID),
+				},
+			},
+			wants: wants{
+				err: dbrp.ErrDBRPNotFound,
+				dbrpMappings: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+		},
+		{
+			name: "update unchangeable fields",
+			fields: DBRPMappingFieldsV2{
+				DBRPMappingsV2: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+			args: args{
+				dbrpMapping: &influxdb.DBRPMappingV2{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket2ID),
+				},
+			},
+			wants: wants{
+				dbrpMappings: []*influxdb.DBRPMappingV2{{
+					ID:              100,
+					Database:        "database1",
+					RetentionPolicy: "retention_policy1",
+					Default:         false,
+					OrganizationID:  MustIDBase16(dbrpOrg1ID),
+					BucketID:        MustIDBase16(dbrpBucket1ID),
+				}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, done := init(tt.fields, t)
+			defer done()
+			ctx := context.Background()
+			err := s.Update(ctx, tt.args.dbrpMapping)
+			if (err != nil) != (tt.wants.err != nil) {
+				t.Errorf("expected error '%v' got '%v'", tt.wants.err, err)
+			}
+
+			if err != nil && tt.wants.err != nil {
+				if err.Error() != tt.wants.err.Error() {
+					t.Errorf("expected error messages to match '%v' got '%v'", tt.wants.err, err.Error())
+				}
+			}
+
+			dbrpMappings, _, err := s.FindMany(ctx, influxdb.DBRPMappingFilterV2{})
+			if err != nil {
+				t.Fatalf("failed to retrieve dbrpMappings: %v", err)
+			}
+			if diff := cmp.Diff(dbrpMappings, tt.wants.dbrpMappings, DBRPMappingCmpOptionsV2...); diff != "" {
 				t.Errorf("dbrpMappings are different -got/+want\ndiff %s", diff)
 			}
 		})
@@ -727,7 +977,8 @@ func DeleteDBRPMappingV2(
 	t *testing.T,
 ) {
 	type args struct {
-		ID influxdb.ID
+		OrgID influxdb.ID
+		ID    influxdb.ID
 	}
 	type wants struct {
 		err          error
@@ -763,7 +1014,8 @@ func DeleteDBRPMappingV2(
 				},
 			},
 			args: args{
-				ID: 100,
+				OrgID: MustIDBase16(dbrpOrg1ID),
+				ID:    100,
 			},
 			wants: wants{
 				dbrpMappings: []*influxdb.DBRPMappingV2{{
@@ -799,7 +1051,8 @@ func DeleteDBRPMappingV2(
 				},
 			},
 			args: args{
-				ID: 300,
+				OrgID: MustIDBase16(dbrpOrg2ID),
+				ID:    100,
 			},
 			wants: wants{
 				dbrpMappings: []*influxdb.DBRPMappingV2{
@@ -829,7 +1082,7 @@ func DeleteDBRPMappingV2(
 			s, done := init(tt.fields, t)
 			defer done()
 			ctx := context.Background()
-			err := s.Delete(ctx, tt.args.ID)
+			err := s.Delete(ctx, tt.args.OrgID, tt.args.ID)
 			if (err != nil) != (tt.wants.err != nil) {
 				t.Fatalf("expected error '%v' got '%v'", tt.wants.err, err)
 			}
@@ -845,7 +1098,7 @@ func DeleteDBRPMappingV2(
 			if err != nil {
 				t.Fatalf("failed to retrieve dbrpMappings: %v", err)
 			}
-			if diff := cmp.Diff(dbrpMappings, tt.wants.dbrpMappings, dbrpMappingCmpOptionsV2...); diff != "" {
+			if diff := cmp.Diff(dbrpMappings, tt.wants.dbrpMappings, DBRPMappingCmpOptionsV2...); diff != "" {
 				t.Errorf("dbrpMappings are different -got/+want\ndiff %s", diff)
 			}
 		})

@@ -13,15 +13,15 @@ type AuthorizedService struct {
 	influxdb.DBRPMappingServiceV2
 }
 
-func (svc AuthorizedService) FindByID(ctx context.Context, id influxdb.ID) (*influxdb.DBRPMappingV2, error) {
-	dbrp, err := svc.DBRPMappingServiceV2.FindByID(ctx, id)
-	if err != nil {
+func NewAuthorizedService(s influxdb.DBRPMappingServiceV2) *AuthorizedService {
+	return &AuthorizedService{DBRPMappingServiceV2: s}
+}
+
+func (svc AuthorizedService) FindByID(ctx context.Context, orgID, id influxdb.ID) (*influxdb.DBRPMappingV2, error) {
+	if _, _, err := authorizer.AuthorizeRead(ctx, influxdb.DBRPResourceType, id, orgID); err != nil {
 		return nil, err
 	}
-	if _, _, err := authorizer.AuthorizeRead(ctx, influxdb.DBRPResourceType, dbrp.ID, dbrp.OrganizationID); err != nil {
-		return nil, ErrUnauthorized(err)
-	}
-	return svc.DBRPMappingServiceV2.FindByID(ctx, id)
+	return svc.DBRPMappingServiceV2.FindByID(ctx, orgID, id)
 }
 
 func (svc AuthorizedService) FindMany(ctx context.Context, filter influxdb.DBRPMappingFilterV2, opts ...influxdb.FindOptions) ([]*influxdb.DBRPMappingV2, int, error) {
@@ -34,25 +34,21 @@ func (svc AuthorizedService) FindMany(ctx context.Context, filter influxdb.DBRPM
 
 func (svc AuthorizedService) Create(ctx context.Context, t *influxdb.DBRPMappingV2) error {
 	if _, _, err := authorizer.AuthorizeCreate(ctx, influxdb.DBRPResourceType, t.OrganizationID); err != nil {
-		return ErrUnauthorized(err)
+		return err
 	}
 	return svc.DBRPMappingServiceV2.Create(ctx, t)
 }
 
 func (svc AuthorizedService) Update(ctx context.Context, u *influxdb.DBRPMappingV2) error {
 	if _, _, err := authorizer.AuthorizeWrite(ctx, influxdb.DBRPResourceType, u.ID, u.OrganizationID); err != nil {
-		return ErrUnauthorized(err)
-	}
-	return svc.Update(ctx, u)
-}
-
-func (svc AuthorizedService) Delete(ctx context.Context, id influxdb.ID) error {
-	dbrp, err := svc.DBRPMappingServiceV2.FindByID(ctx, id)
-	if err != nil {
 		return err
 	}
-	if _, _, err := authorizer.AuthorizeWrite(ctx, influxdb.DBRPResourceType, dbrp.ID, dbrp.OrganizationID); err != nil {
-		return ErrUnauthorized(err)
+	return svc.DBRPMappingServiceV2.Update(ctx, u)
+}
+
+func (svc AuthorizedService) Delete(ctx context.Context, orgID, id influxdb.ID) error {
+	if _, _, err := authorizer.AuthorizeWrite(ctx, influxdb.DBRPResourceType, id, orgID); err != nil {
+		return err
 	}
-	return svc.Delete(ctx, id)
+	return svc.DBRPMappingServiceV2.Delete(ctx, orgID, id)
 }

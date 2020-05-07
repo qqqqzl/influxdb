@@ -49,6 +49,19 @@ func (f FindOptions) QueryParams() map[string][]string {
 	return qp
 }
 
+// SliceQueryParams returns a slice containing url query params from multiple FindOptions.
+func SliceQueryParams(opts ...FindOptions) [][2]string {
+	var out [][2]string
+	for _, o := range opts {
+		for k, vals := range o.QueryParams() {
+			for _, v := range vals {
+				out = append(out, [2]string{k, v})
+			}
+		}
+	}
+	return out
+}
+
 // NewPagingLinks returns a PagingLinks.
 // num is the number of returned results.
 func NewPagingLinks(basePath string, opts FindOptions, f PagingFilter, num int) *PagingLinks {
