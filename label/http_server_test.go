@@ -447,6 +447,8 @@ func TestService_handlePatchLabel(t *testing.T) {
 			router := chi.NewRouter()
 			router.Mount(handler.Prefix(), handler)
 
+			w := httptest.NewRecorder()
+
 			upd := influxdb.LabelUpdate{}
 			if len(tt.args.properties) > 0 {
 				upd.Properties = tt.args.properties
@@ -456,8 +458,6 @@ func TestService_handlePatchLabel(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to marshal label update: %v", err)
 			}
-
-			w := httptest.NewRecorder()
 
 			r := httptest.NewRequest("GET", "http://any.url", bytes.NewReader(l))
 			rctx := chi.NewRouteContext()
