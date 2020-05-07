@@ -16,6 +16,7 @@ const (
 	ReadRangePhysKind           = "ReadRangePhysKind"
 	ReadGroupPhysKind           = "ReadGroupPhysKind"
 	ReadWindowAggregatePhysKind = "ReadWindowAggregatePhysKind"
+	ReadGroupAggregatePhysKind  = "ReadGroupAggregatePhysKind"
 	ReadTagKeysPhysKind         = "ReadTagKeysPhysKind"
 	ReadTagValuesPhysKind       = "ReadTagValuesPhysKind"
 )
@@ -122,6 +123,26 @@ func (s *ReadWindowAggregatePhysSpec) Copy() plan.ProcedureSpec {
 
 	ns.ReadRangePhysSpec = *s.ReadRangePhysSpec.Copy().(*ReadRangePhysSpec)
 	ns.WindowEvery = s.WindowEvery
+	ns.Aggregates = s.Aggregates
+
+	return ns
+}
+
+type ReadGroupAggregatePhysSpec struct {
+	plan.DefaultCost
+	ReadGroupPhysSpec
+
+	Aggregates []plan.ProcedureKind
+}
+
+func (s *ReadGroupAggregatePhysSpec) Kind() plan.ProcedureKind {
+	return ReadGroupAggregatePhysKind
+}
+
+func (s *ReadGroupAggregatePhysSpec) Copy() plan.ProcedureSpec {
+	ns := new(ReadGroupAggregatePhysSpec)
+
+	ns.ReadGroupPhysSpec = *s.ReadGroupPhysSpec.Copy().(*ReadGroupPhysSpec)
 	ns.Aggregates = s.Aggregates
 
 	return ns
